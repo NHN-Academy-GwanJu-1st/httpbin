@@ -1,76 +1,106 @@
 package com.nhnacademy.httpbin;
 
 import java.io.*;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
 import java.util.StringTokenizer;
 
-public class HttpBin implements Runnable{
+public class HttpBin{
 
     private static final int PORT = 80;
+    private static final String HOST = "test-vm.org";
+    private static final String USER_AGENT = "User-Agent: curl/7.68.0";
+    private static final String ACCEPT = "Accept: */*";
 
-    private static final String httpMethod = "GET";
 
-    private Socket socket;
+    private String url;
+    private String method;
+    private boolean verbos;
 
-
-    public HttpBin(Socket socket) {
-        this.socket = socket;
+    public HttpBin() {
+        this.verbos = false;
+        this.method = "GET";
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
 
-        try {
-            ServerSocket serverSocket = new ServerSocket(PORT);
-            System.out.println("server start");
+        if (!args[0].equals("curl")) {
+            throw new RuntimeException("잘못된 명령어 입니다.");
+        }
 
-            while (true) {
-                HttpBin myServer = new HttpBin(serverSocket.accept());
-                System.out.println("Server Connect Success!");
+        HttpBin httpBin = new HttpBin();
 
-                Thread thread = new Thread(myServer);
-                thread.start();
+        start(httpBin, args);
 
+
+    }
+
+    public static void start(HttpBin httpBin, String[] args) throws IOException {
+
+        httpBin.optionCheck(args);
+        /* curl -v http://test-vm/ip */
+
+        URL url = new URL(httpBin.url);
+
+        Socket socket = new Socket();
+        SocketAddress address = new InetSocketAddress(url.getHost(), PORT);
+
+        System.out.println("url getHOst: " + url.getHost());
+        System.out.println("url getPath "  +url.getPath());
+
+        /* 접속 IP 주소 */
+        String clientIp = InetAddress.getLocalHost().getHostAddress();
+        System.out.println(clientIp);
+
+        socket.connect(address);
+
+        StringBuilder outBuilder = new StringBuilder();
+        outBuilder.append(
+                httpBin.method + " /" + url.getPath() + " HTTP/1.1" + "\n" +
+                "Host: " + url.getHost() + "\n" +
+                USER_AGENT + "\n" +
+                ACCEPT + "\n"
+        );
+
+        if (httpBin.verbos) {
+            System.out.println(outBuilder);
+        }
+
+        PrintWriter out = new PrintWriter(socket.getOutputStream());
+
+        out.println(outBuilder);
+        out.println();
+        out.flush();
+
+        BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        StringBuilder sb = new StringBuilder();
+
+        String line;
+        while ((line = input.readLine()) != null) {
+
+            if (!httpBin.verbos) {
+                if (!line.equals("{")) {
+                    continue;
+                } else {
+                    httpBin.verbos = true;
+                }
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    static BufferedReader input;
-    static PrintWriter out;
-    static BufferedOutputStream dataOut;
-
-    @Override
-    public void run() {
-
-        try {
-            StringBuilder sb;
-
-//            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-//            PrintWriter out = new PrintWriter(socket.getOutputStream());
-//            BufferedOutputStream dataOut = new BufferedOutputStream(socket.getOutputStream());
-            input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            out = new PrintWriter(socket.getOutputStream());
-            dataOut = new BufferedOutputStream(socket.getOutputStream());
-
-            String requestHeader = input.readLine();
-            System.out.println(requestHeader);
-            StringTokenizer st = new StringTokenizer(requestHeader);
-
-            /* 요청 HTTP Method  ex: GET / (url parameter) HTTP/1.1 */
-            String httpMethod = st.nextToken().toUpperCase();
-            System.out.println(httpMethod);
-
-            /* url Parameter ex: localhost:12345/( urlParameter ) */
-            String urlParameter = st.nextToken().toLowerCase();
-            System.out.println("requestParameter : " + urlParameter);
-            
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            sb.append(line + "\n");
         }
 
 
     }
+
+    public void optionCheck(String[] params) {
+
+        for (int i = 0; i < params.length; i++) {
+            if (params[i].contains("http")) {
+                this.url = params[i];
+            } else if (params[i].equals("-v")) {
+                this.verbos = true;
+            } else if (params[i].equals("-X")) {
+                this.method = params[i + 1];
+            }
+        }
+    }
+
 }
